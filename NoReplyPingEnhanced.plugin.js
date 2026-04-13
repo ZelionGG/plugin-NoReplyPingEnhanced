@@ -2,7 +2,7 @@
  * @name NoReplyPingEnhanced
  * @description Automatically sets replies to not ping the target, with per-server include/exclude options.
  * @author ZelionGG
- * @authorId 
+ * @authorId
  * @authorLink https://github.com/ZelionGG/
  * @version 1.0
  * @invite gj7JFa6mF8
@@ -29,7 +29,7 @@ module.exports = class NoReplyPingEnhanced {
         this.settings = this.loadSettings();
 
         const { Filters } = this.api.Webpack;
-        this.replyBar = this.getModuleAndKey(Filters.byStrings('type:"CREATE_PENDING_REPLY"'));
+        this.pendingReplyBinding = this.findWebpackBinding(Filters.byStrings('type:"CREATE_PENDING_REPLY"'));
         this.guildStore = this.api.Webpack.getModule((module) => typeof module?.getGuilds === "function", { searchExports: true })
             ?? this.api.Webpack.getModule((module) => typeof module?.getGuild === "function", { searchExports: true });
         this.selectedGuildStore = this.api.Webpack.getModule((module) => typeof module?.getGuildId === "function", { searchExports: true });
@@ -108,7 +108,7 @@ module.exports = class NoReplyPingEnhanced {
         document.getElementById(this.styleElementId)?.remove();
     }
 
-    getModuleAndKey(filter) {
+    findWebpackBinding(filter) {
         const { getModule } = this.api.Webpack;
         let module;
         const value = getModule((e, m) => (filter(e) ? (module = m) : false), { searchExports: true });
@@ -1111,13 +1111,13 @@ module.exports = class NoReplyPingEnhanced {
         this.settings = this.loadSettings();
         this.mountRawCss();
 
-        if (!this.replyBar) {
-            console.error(`${this.meta.name}: Unable to start because the reply bar module could not be found.`);
+        if (!this.pendingReplyBinding) {
+            console.error(`${this.meta.name}: Unable to start because the pending reply hook could not be found.`);
             return;
         }
 
         const { Patcher } = this.api;
-        Patcher.before(...this.replyBar, (_thisArg, [props]) => {
+        Patcher.before(...this.pendingReplyBinding, (_thisArg, [props]) => {
             if (!props || typeof props !== "object") return;
 
             const guildId = this.getCurrentGuildId(props);
