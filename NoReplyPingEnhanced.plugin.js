@@ -9,17 +9,10 @@
  * @source https://github.com/ZelionGG/plugin-NoReplyPingEnhanced/blob/main/NoReplyPingEnhanced.plugin.js
  * @updateUrl https://raw.githubusercontent.com/ZelionGG/plugin-NoReplyPingEnhanced/main/NoReplyPingEnhanced.plugin.js
  */
-const fs = require("fs");
-const path = require("path");
-
-const RAW_CSS_FILENAME = "NoReplyPingEnhanced.raw.css";
-
 module.exports = class NoReplyPingEnhanced {
     constructor(meta) {
         this.meta = meta;
         this.api = new BdApi(meta.name);
-        this.styleElementId = `${meta.name}-raw-css`;
-        this.styleElement = null;
         this.defaultSettings = {
             mode: "exclude",
             guildIds: [],
@@ -44,68 +37,6 @@ module.exports = class NoReplyPingEnhanced {
             (module) => typeof module?.getUserAvatarURL === "function",
             { searchExports: true }
         );
-    }
-
-    getRawCssCandidates() {
-        const candidates = new Set();
-
-        if (typeof BdApi?.Plugins?.folder === "string" && BdApi.Plugins.folder.length > 0) {
-            candidates.add(path.join(BdApi.Plugins.folder, RAW_CSS_FILENAME));
-        }
-
-        if (typeof __dirname === "string" && __dirname.length > 0) {
-            candidates.add(path.join(__dirname, RAW_CSS_FILENAME));
-        }
-
-        if (typeof this.meta?.filename === "string" && this.meta.filename.length > 0) {
-            candidates.add(path.join(path.dirname(this.meta.filename), RAW_CSS_FILENAME));
-        }
-
-        return [...candidates];
-    }
-
-    getRawCssPath() {
-        return this.getRawCssCandidates().find((candidatePath) => {
-            try {
-                return fs.existsSync(candidatePath);
-            }
-            catch {
-                return false;
-            }
-        }) ?? null;
-    }
-
-    mountRawCss() {
-        this.unmountRawCss();
-
-        const cssPath = this.getRawCssPath();
-        if (!cssPath) {
-            console.warn(`${this.meta.name}: ${RAW_CSS_FILENAME} was not found. The plugin will continue with fallback inline styling.`);
-            return;
-        }
-
-        try {
-            const cssText = fs.readFileSync(cssPath, "utf8");
-            if (!cssText.trim()) return;
-
-            const styleElement = document.createElement("style");
-            styleElement.id = this.styleElementId;
-            styleElement.textContent = cssText;
-            (document.head ?? document.documentElement).append(styleElement);
-            this.styleElement = styleElement;
-        }
-        catch (error) {
-            console.warn(`${this.meta.name}: Failed to load ${RAW_CSS_FILENAME}.`, error);
-        }
-    }
-
-    unmountRawCss() {
-        if (this.styleElement?.remove instanceof Function) {
-            this.styleElement.remove();
-        }
-
-        this.styleElement = null;
-        document.getElementById(this.styleElementId)?.remove();
     }
 
     findWebpackBinding(filter) {
@@ -390,20 +321,30 @@ module.exports = class NoReplyPingEnhanced {
 
     createUserAvatar(user, size = 28) {
         const avatar = document.createElement("span");
-        avatar.className = "nrpe-avatar nrpe-avatar--user";
         avatar.style.width = `${size}px`;
         avatar.style.height = `${size}px`;
+        avatar.style.flex = "0 0 auto";
+        avatar.style.display = "inline-flex";
+        avatar.style.alignItems = "center";
+        avatar.style.justifyContent = "center";
+        avatar.style.overflow = "hidden";
+        avatar.style.borderRadius = "50%";
         avatar.style.background = this.withAlpha(this.getThemeValue(["--brand-experiment", "--brand-500", "--text-link"], "rgb(88, 101, 242)"), 0.22);
         avatar.style.color = this.getThemeValue(["--header-primary", "--text-normal"], "#ffffff");
         avatar.style.fontSize = `${Math.max(11, Math.floor(size / 2.4))}px`;
+        avatar.style.fontWeight = "700";
+        avatar.style.lineHeight = "1";
+        avatar.style.textTransform = "uppercase";
         const avatarUrl = this.getUserAvatarUrl(user);
         if (avatarUrl) {
             const image = document.createElement("img");
-            image.className = "nrpe-avatar-image";
             image.src = avatarUrl;
             image.alt = "";
             image.width = size;
             image.height = size;
+            image.style.width = "100%";
+            image.style.height = "100%";
+            image.style.objectFit = "cover";
             image.addEventListener("error", () => {
                 avatar.replaceChildren(this.getUserInitials(user));
             }, { once: true });
@@ -417,21 +358,31 @@ module.exports = class NoReplyPingEnhanced {
 
     createGuildAvatar(guild, size = 20) {
         const avatar = document.createElement("span");
-        avatar.className = "nrpe-avatar nrpe-avatar--guild";
         avatar.style.width = `${size}px`;
         avatar.style.height = `${size}px`;
+        avatar.style.flex = "0 0 auto";
+        avatar.style.display = "inline-flex";
+        avatar.style.alignItems = "center";
+        avatar.style.justifyContent = "center";
+        avatar.style.overflow = "hidden";
+        avatar.style.borderRadius = "50%";
         avatar.style.background = "var(--brand-500, var(--background-accent))";
         avatar.style.color = this.getThemeValue(["--interactive-active", "--white-500"], "#ffffff");
         avatar.style.fontSize = `${Math.max(10, Math.floor(size / 2.2))}px`;
+        avatar.style.fontWeight = "700";
+        avatar.style.lineHeight = "1";
+        avatar.style.textTransform = "uppercase";
 
         const iconUrl = this.getGuildIconUrl(guild);
         if (iconUrl) {
             const image = document.createElement("img");
-            image.className = "nrpe-avatar-image";
             image.src = iconUrl;
             image.alt = "";
             image.width = size;
             image.height = size;
+            image.style.width = "100%";
+            image.style.height = "100%";
+            image.style.objectFit = "cover";
             image.addEventListener("error", () => {
                 avatar.replaceChildren(this.getGuildInitials(guild));
             }, { once: true });
@@ -482,46 +433,79 @@ module.exports = class NoReplyPingEnhanced {
 
     createGuildPicker(guilds) {
         const wrapper = document.createElement("div");
-        wrapper.className = "nrpe-section";
+        wrapper.style.display = "flex";
+        wrapper.style.flexDirection = "column";
+        wrapper.style.gap = "8px";
 
         const title = document.createElement("div");
-        title.className = "nrpe-section-title";
         title.textContent = "Servers";
+        title.style.fontWeight = "600";
 
         const description = document.createElement("div");
-        description.className = "nrpe-section-description";
         description.textContent = "Search and select the servers that should follow the mode above. Direct messages and group DMs are not configured from this list.";
+        description.style.fontSize = "12px";
+        description.style.opacity = "0.7";
+        description.style.marginBottom = "4px";
 
         wrapper.append(title, description);
 
         if (!guilds.length) {
             const empty = document.createElement("div");
-            empty.className = "nrpe-empty-text";
             empty.textContent = "No servers could be loaded.";
+            empty.style.fontSize = "13px";
+            empty.style.opacity = "0.7";
             wrapper.append(empty);
             return wrapper;
         }
 
         const picker = document.createElement("div");
-        picker.className = "nrpe-picker";
+        picker.style.display = "flex";
+        picker.style.flexDirection = "column";
+        picker.style.gap = "8px";
 
         const control = document.createElement("div");
-        control.className = "nrpe-picker-control";
+        control.style.display = "flex";
+        control.style.flexDirection = "column";
+        control.style.gap = "10px";
+        control.style.padding = "10px";
+        control.style.borderRadius = "10px";
+        control.style.background = "var(--background-tertiary)";
+        control.style.border = "1px solid var(--background-modifier-accent)";
+        control.style.cursor = "text";
 
         const tags = document.createElement("div");
-        tags.className = "nrpe-picker-tags";
+        tags.style.display = "flex";
+        tags.style.flexWrap = "wrap";
+        tags.style.gap = "6px";
+        tags.style.alignItems = "center";
+        tags.style.minHeight = "24px";
 
         const input = document.createElement("input");
-        input.className = "nrpe-picker-input";
         input.type = "text";
         input.placeholder = "Search servers...";
         input.autocomplete = "off";
+        input.style.width = "100%";
+        input.style.border = "none";
+        input.style.outline = "none";
+        input.style.background = "transparent";
+        input.style.color = "var(--text-normal)";
+        input.style.font = "inherit";
+        input.style.padding = "0";
 
         const helper = document.createElement("div");
-        helper.className = "nrpe-helper-text";
+        helper.style.fontSize = "12px";
+        helper.style.opacity = "0.7";
 
         const list = document.createElement("div");
-        list.className = "nrpe-picker-list";
+        list.style.display = "none";
+        list.style.flexDirection = "column";
+        list.style.gap = "6px";
+        list.style.maxHeight = "240px";
+        list.style.overflowY = "auto";
+        list.style.padding = "6px";
+        list.style.borderRadius = "10px";
+        list.style.border = "1px solid var(--background-modifier-accent)";
+        list.style.background = "var(--background-secondary)";
 
         control.append(tags, input);
         picker.append(control, helper, list);
@@ -571,15 +555,25 @@ module.exports = class NoReplyPingEnhanced {
 
             if (!selectedGuilds.length) {
                 const placeholder = document.createElement("span");
-                placeholder.className = "nrpe-picker-placeholder";
                 placeholder.textContent = "No servers selected yet.";
+                placeholder.style.fontSize = "12px";
+                placeholder.style.opacity = "0.65";
                 tags.append(placeholder);
                 return;
             }
 
             for (const guild of selectedGuilds) {
                 const tag = document.createElement("div");
-                tag.className = "nrpe-chip";
+                tag.style.display = "inline-flex";
+                tag.style.alignItems = "center";
+                tag.style.gap = "6px";
+                tag.style.maxWidth = "100%";
+                tag.style.padding = "5px 8px";
+                tag.style.borderRadius = "999px";
+                tag.style.background = "var(--background-secondary)";
+                tag.style.border = "1px solid var(--background-modifier-accent)";
+                tag.style.cursor = "pointer";
+                tag.style.transition = "background 120ms ease, border-color 120ms ease";
                 tag.tabIndex = 0;
                 tag.setAttribute("role", "button");
                 tag.setAttribute("aria-label", `Remove ${guild.name || guild.id}`);
@@ -587,8 +581,10 @@ module.exports = class NoReplyPingEnhanced {
                 const avatar = this.createGuildAvatar(guild, 18);
 
                 const name = document.createElement("span");
-                name.className = "nrpe-chip-label";
                 name.textContent = guild.name || guild.id;
+                name.style.whiteSpace = "nowrap";
+                name.style.overflow = "hidden";
+                name.style.textOverflow = "ellipsis";
 
                 const setTagStyle = (hovered) => {
                     tag.style.background = hovered ? accentSoft : "var(--background-secondary)";
@@ -611,9 +607,14 @@ module.exports = class NoReplyPingEnhanced {
                 });
 
                 const remove = document.createElement("button");
-                remove.className = "nrpe-icon-button";
                 remove.type = "button";
                 remove.textContent = "x";
+                remove.style.border = "none";
+                remove.style.background = "transparent";
+                remove.style.color = "var(--text-muted)";
+                remove.style.cursor = "pointer";
+                remove.style.padding = "0";
+                remove.style.font = "inherit";
                 remove.addEventListener("click", (event) => {
                     event.stopPropagation();
                     removeSelectedGuild(guild.id);
@@ -625,20 +626,22 @@ module.exports = class NoReplyPingEnhanced {
         };
 
         const renderList = () => {
-            list.classList.toggle("nrpe-picker-list--open", isOpen);
-
             if (!isOpen) {
+                list.style.display = "none";
                 list.replaceChildren();
                 return;
             }
 
             const filteredGuilds = getFilteredGuilds();
+            list.style.display = "flex";
             list.replaceChildren();
 
             if (!filteredGuilds.length) {
                 const empty = document.createElement("div");
-                empty.className = "nrpe-empty-text nrpe-empty-text--padded";
                 empty.textContent = "No servers found.";
+                empty.style.fontSize = "13px";
+                empty.style.opacity = "0.7";
+                empty.style.padding = "8px 10px";
                 list.append(empty);
                 return;
             }
@@ -649,35 +652,63 @@ module.exports = class NoReplyPingEnhanced {
                 const isSelected = this.settings.guildIds.includes(guild.id);
                 const isActive = index === activeIndex;
                 const option = document.createElement("button");
-                option.className = "nrpe-picker-option";
                 option.type = "button";
+                option.style.display = "flex";
+                option.style.alignItems = "center";
+                option.style.justifyContent = "space-between";
+                option.style.gap = "12px";
+                option.style.padding = "10px";
                 option.style.border = isSelected ? `1px solid ${accentBorder}` : "1px solid transparent";
+                option.style.borderRadius = "8px";
                 option.style.background = isSelected
                     ? (isActive ? accentStrong : accentSoft)
                     : (isActive ? "var(--background-modifier-hover)" : "transparent");
+                option.style.color = "var(--text-normal)";
+                option.style.cursor = "pointer";
+                option.style.textAlign = "left";
+                option.style.font = "inherit";
                 option.style.boxShadow = isSelected ? `inset 0 0 0 1px ${optionInset}` : "none";
+                option.style.transition = "background 120ms ease, border-color 120ms ease";
 
                 const left = document.createElement("span");
-                left.className = "nrpe-picker-option-left";
+                left.style.display = "flex";
+                left.style.alignItems = "center";
+                left.style.gap = "10px";
+                left.style.flex = "1";
+                left.style.minWidth = "0";
 
                 const avatar = this.createGuildAvatar(guild, 24);
                 avatar.style.boxShadow = isSelected ? `0 0 0 1px ${accentRing}` : "none";
 
                 const label = document.createElement("span");
-                label.className = `nrpe-picker-option-label${isSelected ? " nrpe-picker-option-label--selected" : ""}`;
                 label.textContent = guild.name || guild.id;
+                label.style.flex = "1";
+                label.style.minWidth = "0";
+                label.style.overflow = "hidden";
+                label.style.textOverflow = "ellipsis";
+                label.style.whiteSpace = "nowrap";
+                label.style.fontWeight = isSelected ? "600" : "500";
 
                 const badge = document.createElement("span");
-                badge.className = `nrpe-picker-option-badge${isSelected ? " nrpe-picker-option-badge--selected" : " nrpe-picker-option-badge--add"}`;
                 badge.textContent = isSelected ? "Selected" : "+";
+                badge.style.display = "inline-flex";
+                badge.style.alignItems = "center";
+                badge.style.justifyContent = "center";
                 badge.style.opacity = isSelected ? "1" : "0.75";
 
                 if (isSelected) {
+                    badge.style.padding = "4px 8px";
+                    badge.style.borderRadius = "999px";
                     badge.style.background = accentMedium;
                     badge.style.color = selectedBadgeText;
+                    badge.style.fontSize = "11px";
+                    badge.style.fontWeight = "700";
+                    badge.style.letterSpacing = "0.02em";
                 }
                 else {
+                    badge.style.minWidth = "18px";
                     badge.style.color = "var(--interactive-muted)";
+                    badge.style.fontSize = "18px";
                 }
 
                 option.addEventListener("mousedown", (event) => {
@@ -705,7 +736,8 @@ module.exports = class NoReplyPingEnhanced {
         };
 
         const setPickerFocused = (focused) => {
-            control.classList.toggle("nrpe-picker-control--focused", focused);
+            control.style.borderColor = focused ? "var(--text-link)" : "var(--background-modifier-accent)";
+            control.style.boxShadow = focused ? "0 0 0 1px var(--text-link)" : "none";
         };
 
         control.addEventListener("click", () => {
@@ -793,53 +825,99 @@ module.exports = class NoReplyPingEnhanced {
 
     createUserPicker() {
         const wrapper = document.createElement("div");
-        wrapper.className = "nrpe-section nrpe-section--spaced-top";
+        wrapper.style.display = "flex";
+        wrapper.style.flexDirection = "column";
+        wrapper.style.gap = "8px";
+        wrapper.style.marginTop = "20px";
 
         const title = document.createElement("div");
-        title.className = "nrpe-section-title";
         title.textContent = "Users";
+        title.style.fontWeight = "600";
 
         const description = document.createElement("div");
-        description.className = "nrpe-section-description";
         description.textContent = "Add one Discord user ID if you always want replies to that user to avoid pinging them.";
+        description.style.fontSize = "12px";
+        description.style.opacity = "0.7";
+        description.style.marginBottom = "4px";
 
         const helper = document.createElement("div");
-        helper.className = "nrpe-user-callout";
+        helper.style.padding = "12px";
+        helper.style.borderRadius = "10px";
+        helper.style.background = "var(--background-tertiary)";
+        helper.style.border = "1px solid var(--background-modifier-accent)";
+        helper.style.fontSize = "12px";
+        helper.style.lineHeight = "1.45";
+        helper.style.color = "var(--text-normal)";
         helper.textContent = "How to get a User ID: enable Discord Developer Mode in User Settings > Advanced, then right-click the user and choose Copy User ID. Paste a numeric ID. This user rule is combined with the server rule using OR: if the replied user matches this ID, the mention is disabled even if the server rule would normally allow it. If Discord already has that user in local cache, their name and avatar will be shown automatically.";
 
         const body = document.createElement("div");
-        body.className = "nrpe-user-body";
+        body.style.display = "flex";
+        body.style.flexDirection = "column";
+        body.style.gap = "8px";
 
         const control = document.createElement("div");
-        control.className = "nrpe-picker-control nrpe-user-control";
+        control.style.display = "flex";
+        control.style.flexDirection = "column";
+        control.style.gap = "10px";
+        control.style.padding = "10px";
+        control.style.borderRadius = "10px";
+        control.style.background = "var(--background-tertiary)";
+        control.style.border = "1px solid var(--background-modifier-accent)";
 
         const selected = document.createElement("div");
-        selected.className = "nrpe-picker-tags";
+        selected.style.display = "flex";
+        selected.style.flexWrap = "wrap";
+        selected.style.gap = "6px";
+        selected.style.alignItems = "center";
+        selected.style.minHeight = "24px";
 
         const entry = document.createElement("div");
-        entry.className = "nrpe-user-entry";
+        entry.style.display = "flex";
+        entry.style.flexDirection = "column";
+        entry.style.gap = "8px";
 
         const inputRow = document.createElement("div");
-        inputRow.className = "nrpe-input-row";
+        inputRow.style.display = "flex";
+        inputRow.style.gap = "8px";
+        inputRow.style.alignItems = "stretch";
 
         const input = document.createElement("input");
-        input.className = "nrpe-text-input";
         input.type = "text";
         input.inputMode = "numeric";
         input.placeholder = "Paste a Discord User ID...";
         input.autocomplete = "off";
         input.spellcheck = false;
+        input.style.flex = "1";
+        input.style.minWidth = "0";
+        input.style.padding = "10px 12px";
+        input.style.borderRadius = "8px";
+        input.style.border = "1px solid var(--background-modifier-accent)";
+        input.style.background = "var(--background-secondary)";
+        input.style.color = "var(--text-normal)";
+        input.style.font = "inherit";
+        input.style.outline = "none";
 
         const addButton = document.createElement("button");
-        addButton.className = "nrpe-action-button";
         addButton.type = "button";
         addButton.textContent = "Add";
+        addButton.style.border = "none";
+        addButton.style.borderRadius = "8px";
+        addButton.style.padding = "0 14px";
+        addButton.style.background = "var(--button-filled-brand-background, var(--brand-experiment, var(--brand-500)))";
+        addButton.style.color = "var(--white-500, #ffffff)";
+        addButton.style.font = "inherit";
+        addButton.style.fontWeight = "600";
+        addButton.style.cursor = "pointer";
+        addButton.style.minWidth = "84px";
 
         const entryStatus = document.createElement("div");
-        entryStatus.className = "nrpe-status-text";
+        entryStatus.style.fontSize = "12px";
+        entryStatus.style.lineHeight = "1.4";
 
         const selection = document.createElement("div");
-        selection.className = "nrpe-selection";
+        selection.style.display = "flex";
+        selection.style.flexDirection = "column";
+        selection.style.gap = "8px";
 
         const accentColor = this.getThemeValue(["--brand-experiment", "--brand-500", "--text-link"], "rgb(88, 101, 242)");
         const accentSoft = this.withAlpha(accentColor, 0.12);
@@ -913,25 +991,36 @@ module.exports = class NoReplyPingEnhanced {
             const filteredUsers = this.getFilteredUsers();
             if (!filteredUsers.length) {
                 const empty = document.createElement("div");
-                empty.className = "nrpe-picker-placeholder";
                 empty.textContent = "No user selected yet.";
+                empty.style.fontSize = "12px";
+                empty.style.opacity = "0.65";
                 selected.append(empty);
 
                 const hint = document.createElement("div");
-                hint.className = "nrpe-helper-text";
                 hint.textContent = "Add a Discord User ID above if you always want replies to that user to avoid pinging them.";
+                hint.style.fontSize = "12px";
+                hint.style.opacity = "0.7";
                 selection.append(hint);
                 return;
             }
 
             const detail = document.createElement("div");
-            detail.className = "nrpe-detail-text";
+            detail.style.fontSize = "12px";
+            detail.style.opacity = "0.75";
             detail.textContent = `${filteredUsers.length} user${filteredUsers.length === 1 ? "" : "s"} selected. ${getUserBehaviorText()}`;
 
             for (const { id, user } of filteredUsers) {
                 const chip = document.createElement("div");
-                chip.className = "nrpe-chip";
-                chip.style.borderColor = accentBorder;
+                chip.style.display = "inline-flex";
+                chip.style.alignItems = "center";
+                chip.style.gap = "6px";
+                chip.style.maxWidth = "100%";
+                chip.style.padding = "5px 8px";
+                chip.style.borderRadius = "999px";
+                chip.style.background = "var(--background-secondary)";
+                chip.style.border = `1px solid ${accentBorder}`;
+                chip.style.cursor = "pointer";
+                chip.style.transition = "background 120ms ease, border-color 120ms ease";
                 chip.tabIndex = 0;
                 chip.setAttribute("role", "button");
                 chip.setAttribute("aria-label", `Remove ${user ? this.getUserDisplayName(user) : id}`);
@@ -942,13 +1031,21 @@ module.exports = class NoReplyPingEnhanced {
                 avatar.style.fontSize = "10px";
 
                 const name = document.createElement("span");
-                name.className = "nrpe-chip-label";
                 name.textContent = user ? this.getUserDisplayName(user) : `User ID ${id}`;
+                name.style.fontWeight = "500";
+                name.style.whiteSpace = "nowrap";
+                name.style.overflow = "hidden";
+                name.style.textOverflow = "ellipsis";
 
                 const clear = document.createElement("button");
-                clear.className = "nrpe-icon-button";
                 clear.type = "button";
                 clear.textContent = "x";
+                clear.style.border = "none";
+                clear.style.background = "transparent";
+                clear.style.color = "var(--text-muted)";
+                clear.style.cursor = "pointer";
+                clear.style.padding = "0";
+                clear.style.font = "inherit";
 
                 const clearUserFilter = () => {
                     this.removeUserFilter(id);
@@ -994,10 +1091,11 @@ module.exports = class NoReplyPingEnhanced {
             submitUserId();
         });
         input.addEventListener("focus", () => {
-            input.classList.add("nrpe-text-input--focused");
+            input.style.borderColor = "var(--text-link)";
+            input.style.boxShadow = "0 0 0 1px var(--text-link)";
         });
         input.addEventListener("blur", () => {
-            input.classList.remove("nrpe-text-input--focused");
+            input.style.boxShadow = "none";
             updateInputState();
         });
         addButton.addEventListener("click", submitUserId);
@@ -1085,7 +1183,9 @@ module.exports = class NoReplyPingEnhanced {
             return React.createElement(
                 "div",
                 {
-                    className: "nrpe-filters-host"
+                    style: {
+                        marginTop: "20px"
+                    }
                 },
                 React.createElement("div", { ref: containerRef })
             );
@@ -1109,7 +1209,6 @@ module.exports = class NoReplyPingEnhanced {
 
     start() {
         this.settings = this.loadSettings();
-        this.mountRawCss();
 
         if (!this.pendingReplyBinding) {
             console.error(`${this.meta.name}: Unable to start because the pending reply hook could not be found.`);
@@ -1129,7 +1228,6 @@ module.exports = class NoReplyPingEnhanced {
     }
 
     stop() {
-        this.unmountRawCss();
         const { Patcher } = this.api;
         Patcher.unpatchAll();
     }
