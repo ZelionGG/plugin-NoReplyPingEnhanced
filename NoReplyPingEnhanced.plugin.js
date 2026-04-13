@@ -216,186 +216,6 @@ module.exports = class NoReplyPingEnhanced {
         return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
     }
 
-    createModeSetting() {
-        const wrapper = document.createElement("div");
-        wrapper.style.marginBottom = "20px";
-        wrapper.style.display = "flex";
-        wrapper.style.flexDirection = "column";
-
-        const title = document.createElement("div");
-        title.textContent = "Reply behavior by selected servers";
-        title.style.fontWeight = "600";
-        title.style.marginBottom = "8px";
-
-        const description = document.createElement("div");
-        description.textContent = "Choose whether checked servers are excluded from the plugin or are the only servers where it applies.";
-        description.style.fontSize = "12px";
-        description.style.opacity = "0.7";
-        description.style.marginBottom = "10px";
-
-        const accentColor = this.getThemeValue(["--brand-experiment", "--brand-500", "--text-link"], "rgb(88, 101, 242)");
-        const accentSoft = this.withAlpha(accentColor, 0.16);
-        const accentBorder = this.withAlpha(accentColor, 0.55);
-        const fieldBackground = this.toOpaqueColor(
-            this.getThemeValue(["--background-secondary", "--background-tertiary", "--modal-background"], "rgb(43, 45, 49)"),
-            "rgb(43, 45, 49)",
-            0.96
-        );
-        const menuBackground = this.toOpaqueColor(
-            this.getThemeValue(["--background-floating", "--background-secondary", "--modal-background"], "rgb(32, 34, 37)"),
-            "rgb(32, 34, 37)",
-            0.985
-        );
-        const mutedText = this.getThemeValue(["--text-muted", "--interactive-muted"], "var(--text-muted)");
-
-        const options = [
-            { value: "exclude", label: "Exclude checked servers" },
-            { value: "include", label: "Only apply on checked servers" }
-        ];
-
-        const dropdown = document.createElement("div");
-        dropdown.style.position = "relative";
-
-        const trigger = document.createElement("button");
-        trigger.type = "button";
-        trigger.style.width = "100%";
-        trigger.style.display = "flex";
-        trigger.style.alignItems = "center";
-        trigger.style.justifyContent = "space-between";
-        trigger.style.gap = "12px";
-        trigger.style.padding = "10px 12px";
-        trigger.style.borderRadius = "8px";
-        trigger.style.border = "1px solid var(--background-modifier-accent)";
-        trigger.style.background = fieldBackground;
-        trigger.style.color = "var(--text-normal)";
-        trigger.style.font = "inherit";
-        trigger.style.cursor = "pointer";
-        trigger.style.textAlign = "left";
-        trigger.setAttribute("aria-haspopup", "listbox");
-
-        const triggerLabel = document.createElement("span");
-        triggerLabel.style.flex = "1";
-        triggerLabel.style.minWidth = "0";
-        triggerLabel.style.whiteSpace = "nowrap";
-        triggerLabel.style.overflow = "hidden";
-        triggerLabel.style.textOverflow = "ellipsis";
-
-        const chevron = document.createElement("span");
-        chevron.textContent = "▾";
-        chevron.style.color = mutedText;
-        chevron.style.fontSize = "12px";
-        chevron.style.transition = "transform 120ms ease";
-
-        const menu = document.createElement("div");
-        menu.style.position = "absolute";
-        menu.style.top = "calc(100% + 8px)";
-        menu.style.left = "0";
-        menu.style.right = "0";
-        menu.style.display = "none";
-        menu.style.flexDirection = "column";
-        menu.style.padding = "6px";
-        menu.style.borderRadius = "10px";
-        menu.style.border = "1px solid var(--background-modifier-accent)";
-        menu.style.background = menuBackground;
-        menu.style.boxShadow = "0 10px 30px rgba(0, 0, 0, 0.35)";
-        menu.style.backdropFilter = "blur(6px)";
-        menu.style.overflow = "hidden";
-        menu.style.zIndex = "20";
-
-        let isOpen = false;
-
-        const updateMenu = () => {
-            const current = options.find((option) => option.value === this.settings.mode) ?? options[0];
-            triggerLabel.textContent = current.label;
-            trigger.style.borderColor = isOpen ? accentBorder : "var(--background-modifier-accent)";
-            trigger.style.boxShadow = isOpen ? `0 0 0 1px ${accentBorder}` : "none";
-            chevron.style.transform = isOpen ? "rotate(180deg)" : "rotate(0deg)";
-            menu.style.display = isOpen ? "flex" : "none";
-        };
-
-        const closeMenu = () => {
-            isOpen = false;
-            updateMenu();
-        };
-
-        for (const option of options) {
-            const optionButton = document.createElement("button");
-            optionButton.type = "button";
-            optionButton.textContent = option.label;
-            optionButton.style.width = "100%";
-            optionButton.style.display = "flex";
-            optionButton.style.alignItems = "center";
-            optionButton.style.justifyContent = "space-between";
-            optionButton.style.padding = "10px 12px";
-            optionButton.style.border = "1px solid transparent";
-            optionButton.style.borderRadius = "8px";
-            optionButton.style.background = option.value === this.settings.mode ? accentSoft : menuBackground;
-            optionButton.style.color = "var(--text-normal)";
-            optionButton.style.font = "inherit";
-            optionButton.style.cursor = "pointer";
-            optionButton.style.textAlign = "left";
-
-            if (option.value === this.settings.mode) {
-                optionButton.style.borderColor = accentBorder;
-                optionButton.style.fontWeight = "600";
-            }
-
-            optionButton.addEventListener("mouseenter", () => {
-                if (option.value === this.settings.mode) return;
-                optionButton.style.background = "var(--background-modifier-hover)";
-            });
-
-            optionButton.addEventListener("mouseleave", () => {
-                if (option.value === this.settings.mode) return;
-                optionButton.style.background = menuBackground;
-            });
-
-            optionButton.addEventListener("click", () => {
-                this.settings.mode = option.value === "include" ? "include" : "exclude";
-                this.saveSettings();
-                closeMenu();
-
-                for (const child of menu.children) {
-                    child.style.background = menuBackground;
-                    child.style.borderColor = "transparent";
-                    child.style.fontWeight = "400";
-                }
-
-                optionButton.style.background = accentSoft;
-                optionButton.style.borderColor = accentBorder;
-                optionButton.style.fontWeight = "600";
-                updateMenu();
-            });
-
-            menu.append(optionButton);
-        }
-
-        trigger.append(triggerLabel, chevron);
-        dropdown.append(trigger, menu);
-
-        trigger.addEventListener("click", () => {
-            isOpen = !isOpen;
-            updateMenu();
-        });
-
-        trigger.addEventListener("keydown", (event) => {
-            if (event.key !== "Escape") return;
-            event.preventDefault();
-            closeMenu();
-        });
-
-        dropdown.addEventListener("focusout", () => {
-            window.setTimeout(() => {
-                if (dropdown.contains(document.activeElement)) return;
-                closeMenu();
-            }, 0);
-        });
-
-        updateMenu();
-        wrapper.append(title, description, dropdown);
-        return wrapper;
-    }
-
     createGuildPicker(guilds) {
         const wrapper = document.createElement("div");
         wrapper.style.display = "flex";
@@ -788,16 +608,77 @@ module.exports = class NoReplyPingEnhanced {
         return wrapper;
     }
 
+    createNativeModeSettingsPanel() {
+        if (typeof BdApi?.UI?.buildSettingsPanel !== "function") return null;
+
+        return BdApi.UI.buildSettingsPanel({
+            settings: [
+                {
+                    type: "dropdown",
+                    id: "mode",
+                    name: "Reply behavior by selected servers",
+                    note: "Choose whether checked servers are excluded from the plugin or are the only servers where it applies.",
+                    value: this.settings.mode,
+                    options: [
+                        { label: "Exclude checked servers", value: "exclude" },
+                        { label: "Only apply on checked servers", value: "include" }
+                    ]
+                }
+            ],
+            onChange: (firstArg, secondArg, thirdArg) => {
+                const settingId = thirdArg === undefined ? firstArg : secondArg;
+                const value = thirdArg === undefined ? secondArg : thirdArg;
+                if (settingId !== "mode") return;
+
+                this.settings.mode = value === "include" ? "include" : "exclude";
+                this.saveSettings();
+            }
+        });
+    }
+
+    createGuildPickerHost(guilds) {
+        const React = this.api.React;
+        const plugin = this;
+
+        return function GuildPickerHost() {
+            const containerRef = React.useRef(null);
+
+            React.useEffect(() => {
+                const container = containerRef.current;
+                if (!container) return undefined;
+
+                container.replaceChildren(plugin.createGuildPicker(guilds));
+
+                return () => {
+                    container.replaceChildren();
+                };
+            }, []);
+
+            return React.createElement(
+                "div",
+                {
+                    style: {
+                        marginTop: "20px"
+                    }
+                },
+                React.createElement("div", { ref: containerRef })
+            );
+        };
+    }
+
+    createNativeSettingsPanel(guilds) {
+        const React = this.api.React;
+        const nativePanel = this.createNativeModeSettingsPanel();
+        if (!nativePanel) return null;
+
+        const GuildPickerHost = this.createGuildPickerHost(guilds);
+        return React.createElement(React.Fragment, null, nativePanel, React.createElement(GuildPickerHost));
+    }
+
     getSettingsPanel() {
-        const panel = document.createElement("div");
-        panel.style.display = "flex";
-        panel.style.flexDirection = "column";
-        panel.style.gap = "16px";
-
+        this.settings = this.loadSettings();
         const guilds = this.getGuilds();
-        panel.append(this.createModeSetting(), this.createGuildPicker(guilds));
-
-        return panel;
+        return this.createNativeSettingsPanel(guilds);
     }
 
     start() {
