@@ -431,13 +431,6 @@ module.exports = class NoReplyPingEnhanced {
         return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
     }
 
-    toOpaqueColor(color, fallback = "rgb(30, 31, 34)", alpha = 0.98) {
-        const rgb = this.parseCssColor(color) ?? this.parseCssColor(fallback);
-        if (!rgb) return `rgba(30, 31, 34, ${alpha})`;
-
-        return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
-    }
-
     createGuildPicker(guilds) {
         const wrapper = document.createElement("div");
         wrapper.style.display = "flex";
