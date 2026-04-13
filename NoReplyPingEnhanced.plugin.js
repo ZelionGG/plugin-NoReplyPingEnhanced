@@ -527,16 +527,12 @@ module.exports = class NoReplyPingEnhanced {
         const getFilteredGuilds = () => {
             const normalizedQuery = query.trim().toLowerCase();
             const filteredGuilds = guilds.filter((guild) => {
+                if (this.settings.guildIds.includes(guild.id)) return false;
                 const guildName = `${guild.name || ""} ${guild.id}`.toLowerCase();
                 return normalizedQuery.length === 0 || guildName.includes(normalizedQuery);
             });
 
-            return filteredGuilds.sort((left, right) => {
-                const leftSelected = this.settings.guildIds.includes(left.id);
-                const rightSelected = this.settings.guildIds.includes(right.id);
-                if (leftSelected === rightSelected) return 0;
-                return leftSelected ? -1 : 1;
-            });
+            return filteredGuilds;
         };
 
         const removeSelectedGuild = (guildId) => {
@@ -550,7 +546,7 @@ module.exports = class NoReplyPingEnhanced {
 
             const selectedGuilds = getSelectedGuilds();
             helper.textContent = selectedGuilds.length
-                ? `${selectedGuilds.length} server${selectedGuilds.length === 1 ? "" : "s"} selected. Click a tag or a selected result to remove it.`
+                ? `${selectedGuilds.length} server${selectedGuilds.length === 1 ? "" : "s"} selected. Click a tag to remove it.`
                 : "Search for a server to add it to this rule.";
 
             if (!selectedGuilds.length) {
@@ -638,7 +634,9 @@ module.exports = class NoReplyPingEnhanced {
 
             if (!filteredGuilds.length) {
                 const empty = document.createElement("div");
-                empty.textContent = "No servers found.";
+                empty.textContent = getSelectedGuilds().length === guilds.length
+                    ? "All servers are already selected. Remove a tag to add a different one."
+                    : "No servers found.";
                 empty.style.fontSize = "13px";
                 empty.style.opacity = "0.7";
                 empty.style.padding = "8px 10px";
