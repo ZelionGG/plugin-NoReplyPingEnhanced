@@ -85,12 +85,9 @@ module.exports = class NoReplyPingEnhanced {
     }
 
     normalizeUserIds(userIds) {
-        if (Array.isArray(userIds)) {
-            return [...new Set(userIds.map((userId) => this.normalizeUserId(userId)).filter(Boolean))];
-        }
+        if (!Array.isArray(userIds)) return [];
 
-        const singleUserId = this.normalizeUserId(userIds);
-        return singleUserId ? [singleUserId] : [];
+        return [...new Set(userIds.map((userId) => this.normalizeUserId(userId)).filter(Boolean))];
     }
 
     isLikelyDiscordUserId(userId) {
