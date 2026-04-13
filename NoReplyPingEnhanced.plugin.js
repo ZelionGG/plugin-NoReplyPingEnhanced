@@ -145,7 +145,7 @@ module.exports = class NoReplyPingEnhanced {
         avatar.style.overflow = "hidden";
         avatar.style.borderRadius = "50%";
         avatar.style.background = "var(--brand-500, var(--background-accent))";
-        avatar.style.color = "white";
+        avatar.style.color = this.getThemeValue(["--interactive-active", "--white-500"], "#ffffff");
         avatar.style.fontSize = `${Math.max(10, Math.floor(size / 2.2))}px`;
         avatar.style.fontWeight = "700";
         avatar.style.lineHeight = "1";
@@ -172,9 +172,55 @@ module.exports = class NoReplyPingEnhanced {
         return avatar;
     }
 
+    getThemeValue(variableNames, fallback = "") {
+        const styles = window.getComputedStyle(document.documentElement);
+        for (const variableName of variableNames) {
+            const value = styles.getPropertyValue(variableName).trim();
+            if (value) return value;
+        }
+
+        return fallback;
+    }
+
+    parseCssColor(color) {
+        if (typeof color !== "string") return null;
+
+        const normalized = color.trim();
+        const rgbMatch = normalized.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+        if (rgbMatch) {
+            return rgbMatch.slice(1, 4).map((value) => Number.parseInt(value, 10));
+        }
+
+        const hexMatch = normalized.match(/^#([\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i);
+        if (!hexMatch) return null;
+
+        const hex = hexMatch[1];
+        if (hex.length === 3) {
+            return [...hex].map((value) => Number.parseInt(`${value}${value}`, 16));
+        }
+
+        return [0, 2, 4].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
+    }
+
+    withAlpha(color, alpha, fallback = "rgb(88, 101, 242)") {
+        const rgb = this.parseCssColor(color) ?? this.parseCssColor(fallback);
+        if (!rgb) return `rgba(88, 101, 242, ${alpha})`;
+
+        return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+    }
+
+    toOpaqueColor(color, fallback = "rgb(30, 31, 34)", alpha = 0.98) {
+        const rgb = this.parseCssColor(color) ?? this.parseCssColor(fallback);
+        if (!rgb) return `rgba(30, 31, 34, ${alpha})`;
+
+        return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+    }
+
     createModeSetting() {
         const wrapper = document.createElement("div");
         wrapper.style.marginBottom = "20px";
+        wrapper.style.display = "flex";
+        wrapper.style.flexDirection = "column";
 
         const title = document.createElement("div");
         title.textContent = "Reply behavior by selected servers";
@@ -187,21 +233,166 @@ module.exports = class NoReplyPingEnhanced {
         description.style.opacity = "0.7";
         description.style.marginBottom = "10px";
 
-        const select = document.createElement("select");
-        select.style.width = "100%";
-        select.style.padding = "8px";
-        select.style.borderRadius = "6px";
+        const accentColor = this.getThemeValue(["--brand-experiment", "--brand-500", "--text-link"], "rgb(88, 101, 242)");
+        const accentSoft = this.withAlpha(accentColor, 0.16);
+        const accentBorder = this.withAlpha(accentColor, 0.55);
+        const fieldBackground = this.toOpaqueColor(
+            this.getThemeValue(["--background-secondary", "--background-tertiary", "--modal-background"], "rgb(43, 45, 49)"),
+            "rgb(43, 45, 49)",
+            0.96
+        );
+        const menuBackground = this.toOpaqueColor(
+            this.getThemeValue(["--background-floating", "--background-secondary", "--modal-background"], "rgb(32, 34, 37)"),
+            "rgb(32, 34, 37)",
+            0.985
+        );
+        const mutedText = this.getThemeValue(["--text-muted", "--interactive-muted"], "var(--text-muted)");
 
-        const excludeOption = new Option("Exclude checked servers", "exclude", this.settings.mode === "exclude", this.settings.mode === "exclude");
-        const includeOption = new Option("Only apply on checked servers", "include", this.settings.mode === "include", this.settings.mode === "include");
+        const options = [
+            { value: "exclude", label: "Exclude checked servers" },
+            { value: "include", label: "Only apply on checked servers" }
+        ];
 
-        select.append(excludeOption, includeOption);
-        select.addEventListener("change", () => {
-            this.settings.mode = select.value === "include" ? "include" : "exclude";
-            this.saveSettings();
+        const dropdown = document.createElement("div");
+        dropdown.style.position = "relative";
+
+        const trigger = document.createElement("button");
+        trigger.type = "button";
+        trigger.style.width = "100%";
+        trigger.style.display = "flex";
+        trigger.style.alignItems = "center";
+        trigger.style.justifyContent = "space-between";
+        trigger.style.gap = "12px";
+        trigger.style.padding = "10px 12px";
+        trigger.style.borderRadius = "8px";
+        trigger.style.border = "1px solid var(--background-modifier-accent)";
+        trigger.style.background = fieldBackground;
+        trigger.style.color = "var(--text-normal)";
+        trigger.style.font = "inherit";
+        trigger.style.cursor = "pointer";
+        trigger.style.textAlign = "left";
+        trigger.setAttribute("aria-haspopup", "listbox");
+
+        const triggerLabel = document.createElement("span");
+        triggerLabel.style.flex = "1";
+        triggerLabel.style.minWidth = "0";
+        triggerLabel.style.whiteSpace = "nowrap";
+        triggerLabel.style.overflow = "hidden";
+        triggerLabel.style.textOverflow = "ellipsis";
+
+        const chevron = document.createElement("span");
+        chevron.textContent = "▾";
+        chevron.style.color = mutedText;
+        chevron.style.fontSize = "12px";
+        chevron.style.transition = "transform 120ms ease";
+
+        const menu = document.createElement("div");
+        menu.style.position = "absolute";
+        menu.style.top = "calc(100% + 8px)";
+        menu.style.left = "0";
+        menu.style.right = "0";
+        menu.style.display = "none";
+        menu.style.flexDirection = "column";
+        menu.style.padding = "6px";
+        menu.style.borderRadius = "10px";
+        menu.style.border = "1px solid var(--background-modifier-accent)";
+        menu.style.background = menuBackground;
+        menu.style.boxShadow = "0 10px 30px rgba(0, 0, 0, 0.35)";
+        menu.style.backdropFilter = "blur(6px)";
+        menu.style.overflow = "hidden";
+        menu.style.zIndex = "20";
+
+        let isOpen = false;
+
+        const updateMenu = () => {
+            const current = options.find((option) => option.value === this.settings.mode) ?? options[0];
+            triggerLabel.textContent = current.label;
+            trigger.style.borderColor = isOpen ? accentBorder : "var(--background-modifier-accent)";
+            trigger.style.boxShadow = isOpen ? `0 0 0 1px ${accentBorder}` : "none";
+            chevron.style.transform = isOpen ? "rotate(180deg)" : "rotate(0deg)";
+            menu.style.display = isOpen ? "flex" : "none";
+        };
+
+        const closeMenu = () => {
+            isOpen = false;
+            updateMenu();
+        };
+
+        for (const option of options) {
+            const optionButton = document.createElement("button");
+            optionButton.type = "button";
+            optionButton.textContent = option.label;
+            optionButton.style.width = "100%";
+            optionButton.style.display = "flex";
+            optionButton.style.alignItems = "center";
+            optionButton.style.justifyContent = "space-between";
+            optionButton.style.padding = "10px 12px";
+            optionButton.style.border = "1px solid transparent";
+            optionButton.style.borderRadius = "8px";
+            optionButton.style.background = option.value === this.settings.mode ? accentSoft : menuBackground;
+            optionButton.style.color = "var(--text-normal)";
+            optionButton.style.font = "inherit";
+            optionButton.style.cursor = "pointer";
+            optionButton.style.textAlign = "left";
+
+            if (option.value === this.settings.mode) {
+                optionButton.style.borderColor = accentBorder;
+                optionButton.style.fontWeight = "600";
+            }
+
+            optionButton.addEventListener("mouseenter", () => {
+                if (option.value === this.settings.mode) return;
+                optionButton.style.background = "var(--background-modifier-hover)";
+            });
+
+            optionButton.addEventListener("mouseleave", () => {
+                if (option.value === this.settings.mode) return;
+                optionButton.style.background = menuBackground;
+            });
+
+            optionButton.addEventListener("click", () => {
+                this.settings.mode = option.value === "include" ? "include" : "exclude";
+                this.saveSettings();
+                closeMenu();
+
+                for (const child of menu.children) {
+                    child.style.background = menuBackground;
+                    child.style.borderColor = "transparent";
+                    child.style.fontWeight = "400";
+                }
+
+                optionButton.style.background = accentSoft;
+                optionButton.style.borderColor = accentBorder;
+                optionButton.style.fontWeight = "600";
+                updateMenu();
+            });
+
+            menu.append(optionButton);
+        }
+
+        trigger.append(triggerLabel, chevron);
+        dropdown.append(trigger, menu);
+
+        trigger.addEventListener("click", () => {
+            isOpen = !isOpen;
+            updateMenu();
         });
 
-        wrapper.append(title, description, select);
+        trigger.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            closeMenu();
+        });
+
+        dropdown.addEventListener("focusout", () => {
+            window.setTimeout(() => {
+                if (dropdown.contains(document.activeElement)) return;
+                closeMenu();
+            }, 0);
+        });
+
+        updateMenu();
+        wrapper.append(title, description, dropdown);
         return wrapper;
     }
 
@@ -288,6 +479,14 @@ module.exports = class NoReplyPingEnhanced {
         let query = "";
         let isOpen = false;
         let activeIndex = 0;
+        const accentColor = this.getThemeValue(["--brand-experiment", "--brand-500", "--text-link"], "rgb(88, 101, 242)");
+        const accentSoft = this.withAlpha(accentColor, 0.16);
+        const accentMedium = this.withAlpha(accentColor, 0.22);
+        const accentStrong = this.withAlpha(accentColor, 0.28);
+        const accentBorder = this.withAlpha(accentColor, 0.55);
+        const accentRing = this.withAlpha(accentColor, 0.65);
+        const optionInset = this.withAlpha(this.getThemeValue(["--white-500"], "rgb(255, 255, 255)"), 0.03, "rgb(255, 255, 255)");
+        const selectedBadgeText = this.getThemeValue(["--header-primary", "--text-normal"], "var(--text-normal)");
 
         const getSelectedGuilds = () => guilds.filter((guild) => this.settings.guildIds.includes(guild.id));
         const getFilteredGuilds = () => {
@@ -353,8 +552,8 @@ module.exports = class NoReplyPingEnhanced {
                 name.style.textOverflow = "ellipsis";
 
                 const setTagStyle = (hovered) => {
-                    tag.style.background = hovered ? "rgba(88, 101, 242, 0.16)" : "var(--background-secondary)";
-                    tag.style.borderColor = hovered ? "rgba(88, 101, 242, 0.55)" : "var(--background-modifier-accent)";
+                    tag.style.background = hovered ? accentSoft : "var(--background-secondary)";
+                    tag.style.borderColor = hovered ? accentBorder : "var(--background-modifier-accent)";
                 };
 
                 setTagStyle(false);
@@ -424,16 +623,16 @@ module.exports = class NoReplyPingEnhanced {
                 option.style.justifyContent = "space-between";
                 option.style.gap = "12px";
                 option.style.padding = "10px";
-                option.style.border = isSelected ? "1px solid rgba(88, 101, 242, 0.55)" : "1px solid transparent";
+                option.style.border = isSelected ? `1px solid ${accentBorder}` : "1px solid transparent";
                 option.style.borderRadius = "8px";
                 option.style.background = isSelected
-                    ? (isActive ? "rgba(88, 101, 242, 0.28)" : "rgba(88, 101, 242, 0.16)")
+                    ? (isActive ? accentStrong : accentSoft)
                     : (isActive ? "var(--background-modifier-hover)" : "transparent");
                 option.style.color = "var(--text-normal)";
                 option.style.cursor = "pointer";
                 option.style.textAlign = "left";
                 option.style.font = "inherit";
-                option.style.boxShadow = isSelected ? "inset 0 0 0 1px rgba(255, 255, 255, 0.03)" : "none";
+                option.style.boxShadow = isSelected ? `inset 0 0 0 1px ${optionInset}` : "none";
                 option.style.transition = "background 120ms ease, border-color 120ms ease";
 
                 const left = document.createElement("span");
@@ -444,7 +643,7 @@ module.exports = class NoReplyPingEnhanced {
                 left.style.minWidth = "0";
 
                 const avatar = this.createGuildAvatar(guild, 24);
-                avatar.style.boxShadow = isSelected ? "0 0 0 1px rgba(88, 101, 242, 0.65)" : "none";
+                avatar.style.boxShadow = isSelected ? `0 0 0 1px ${accentRing}` : "none";
 
                 const label = document.createElement("span");
                 label.textContent = guild.name || guild.id;
@@ -465,8 +664,8 @@ module.exports = class NoReplyPingEnhanced {
                 if (isSelected) {
                     badge.style.padding = "4px 8px";
                     badge.style.borderRadius = "999px";
-                    badge.style.background = "rgba(88, 101, 242, 0.22)";
-                    badge.style.color = "var(--header-primary)";
+                    badge.style.background = accentMedium;
+                    badge.style.color = selectedBadgeText;
                     badge.style.fontSize = "11px";
                     badge.style.fontWeight = "700";
                     badge.style.letterSpacing = "0.02em";
