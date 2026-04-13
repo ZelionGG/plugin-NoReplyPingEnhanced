@@ -305,6 +305,12 @@ module.exports = class NoReplyPingEnhanced {
             });
         };
 
+        const removeSelectedGuild = (guildId) => {
+            this.toggleGuild(guildId, false);
+            render();
+            input.focus();
+        };
+
         const renderTags = () => {
             tags.replaceChildren();
 
@@ -332,6 +338,11 @@ module.exports = class NoReplyPingEnhanced {
                 tag.style.borderRadius = "999px";
                 tag.style.background = "var(--background-secondary)";
                 tag.style.border = "1px solid var(--background-modifier-accent)";
+                tag.style.cursor = "pointer";
+                tag.style.transition = "background 120ms ease, border-color 120ms ease";
+                tag.tabIndex = 0;
+                tag.setAttribute("role", "button");
+                tag.setAttribute("aria-label", `Remove ${guild.name || guild.id}`);
 
                 const avatar = this.createGuildAvatar(guild, 18);
 
@@ -340,6 +351,26 @@ module.exports = class NoReplyPingEnhanced {
                 name.style.whiteSpace = "nowrap";
                 name.style.overflow = "hidden";
                 name.style.textOverflow = "ellipsis";
+
+                const setTagStyle = (hovered) => {
+                    tag.style.background = hovered ? "rgba(88, 101, 242, 0.16)" : "var(--background-secondary)";
+                    tag.style.borderColor = hovered ? "rgba(88, 101, 242, 0.55)" : "var(--background-modifier-accent)";
+                };
+
+                setTagStyle(false);
+                tag.addEventListener("mouseenter", () => setTagStyle(true));
+                tag.addEventListener("mouseleave", () => setTagStyle(false));
+                tag.addEventListener("focus", () => setTagStyle(true));
+                tag.addEventListener("blur", () => setTagStyle(false));
+                tag.addEventListener("click", () => {
+                    removeSelectedGuild(guild.id);
+                });
+                tag.addEventListener("keydown", (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+
+                    event.preventDefault();
+                    removeSelectedGuild(guild.id);
+                });
 
                 const remove = document.createElement("button");
                 remove.type = "button";
@@ -352,9 +383,7 @@ module.exports = class NoReplyPingEnhanced {
                 remove.style.font = "inherit";
                 remove.addEventListener("click", (event) => {
                     event.stopPropagation();
-                    this.toggleGuild(guild.id, false);
-                    render();
-                    input.focus();
+                    removeSelectedGuild(guild.id);
                 });
 
                 tag.append(avatar, name, remove);
@@ -387,6 +416,7 @@ module.exports = class NoReplyPingEnhanced {
 
             for (const [index, guild] of filteredGuilds.entries()) {
                 const isSelected = this.settings.guildIds.includes(guild.id);
+                const isActive = index === activeIndex;
                 const option = document.createElement("button");
                 option.type = "button";
                 option.style.display = "flex";
@@ -394,17 +424,17 @@ module.exports = class NoReplyPingEnhanced {
                 option.style.justifyContent = "space-between";
                 option.style.gap = "12px";
                 option.style.padding = "10px";
-                option.style.border = "none";
+                option.style.border = isSelected ? "1px solid rgba(88, 101, 242, 0.55)" : "1px solid transparent";
                 option.style.borderRadius = "8px";
-                option.style.background = index === activeIndex
-                    ? "var(--background-modifier-hover)"
-                    : isSelected
-                        ? "var(--background-tertiary)"
-                        : "transparent";
+                option.style.background = isSelected
+                    ? (isActive ? "rgba(88, 101, 242, 0.28)" : "rgba(88, 101, 242, 0.16)")
+                    : (isActive ? "var(--background-modifier-hover)" : "transparent");
                 option.style.color = "var(--text-normal)";
                 option.style.cursor = "pointer";
                 option.style.textAlign = "left";
                 option.style.font = "inherit";
+                option.style.boxShadow = isSelected ? "inset 0 0 0 1px rgba(255, 255, 255, 0.03)" : "none";
+                option.style.transition = "background 120ms ease, border-color 120ms ease";
 
                 const left = document.createElement("span");
                 left.style.display = "flex";
@@ -414,6 +444,7 @@ module.exports = class NoReplyPingEnhanced {
                 left.style.minWidth = "0";
 
                 const avatar = this.createGuildAvatar(guild, 24);
+                avatar.style.boxShadow = isSelected ? "0 0 0 1px rgba(88, 101, 242, 0.65)" : "none";
 
                 const label = document.createElement("span");
                 label.textContent = guild.name || guild.id;
@@ -422,11 +453,29 @@ module.exports = class NoReplyPingEnhanced {
                 label.style.overflow = "hidden";
                 label.style.textOverflow = "ellipsis";
                 label.style.whiteSpace = "nowrap";
+                label.style.fontWeight = isSelected ? "600" : "500";
 
                 const badge = document.createElement("span");
                 badge.textContent = isSelected ? "Selected" : "+";
-                badge.style.fontSize = "18px";
+                badge.style.display = "inline-flex";
+                badge.style.alignItems = "center";
+                badge.style.justifyContent = "center";
                 badge.style.opacity = isSelected ? "1" : "0.75";
+
+                if (isSelected) {
+                    badge.style.padding = "4px 8px";
+                    badge.style.borderRadius = "999px";
+                    badge.style.background = "rgba(88, 101, 242, 0.22)";
+                    badge.style.color = "var(--header-primary)";
+                    badge.style.fontSize = "11px";
+                    badge.style.fontWeight = "700";
+                    badge.style.letterSpacing = "0.02em";
+                }
+                else {
+                    badge.style.minWidth = "18px";
+                    badge.style.color = "var(--interactive-muted)";
+                    badge.style.fontSize = "18px";
+                }
 
                 option.addEventListener("mousedown", (event) => {
                     event.preventDefault();
