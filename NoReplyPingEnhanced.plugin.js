@@ -51,9 +51,10 @@ module.exports = class NoReplyPingEnhanced {
         const saved = BdApi.Data.load(this.meta.name, "settings");
         const settings = {
             ...this.defaultSettings,
-            ...(saved && typeof saved === "object" ? saved : {}),
+            mode: saved?.mode,
             guildIds: this.normalizeGuildIds(saved?.guildIds),
-            userIds: this.normalizeUserIds(saved?.userIds ?? saved?.userId)
+            userIds: this.normalizeUserIds(saved?.userIds),
+            applyInDms: saved?.applyInDms
         };
 
         return {
@@ -64,8 +65,12 @@ module.exports = class NoReplyPingEnhanced {
     }
 
     saveSettings() {
-        this.settings.guildIds = this.normalizeGuildIds(this.settings.guildIds);
-        this.settings.userIds = this.normalizeUserIds(this.settings.userIds);
+        this.settings = {
+            mode: this.settings.mode === "include" ? "include" : "exclude",
+            guildIds: this.normalizeGuildIds(this.settings.guildIds),
+            userIds: this.normalizeUserIds(this.settings.userIds),
+            applyInDms: Boolean(this.settings.applyInDms)
+        };
         BdApi.Data.save(this.meta.name, "settings", this.settings);
     }
 
