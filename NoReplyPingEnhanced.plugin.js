@@ -4,7 +4,7 @@
  * @author ZelionGG
  * @authorId 
  * @authorLink https://github.com/ZelionGG/
- * @version 1.1.0
+ * @version 1.0
  * @invite gj7JFa6mF8
  * @source https://github.com/ZelionGG/plugin-NoReplyPingEnhanced/blob/main/NoReplyPingEnhanced.plugin.js
  * @updateUrl https://raw.githubusercontent.com/ZelionGG/plugin-NoReplyPingEnhanced/main/NoReplyPingEnhanced.plugin.js
@@ -16,6 +16,7 @@ module.exports = class NoReplyPingEnhanced {
         this.defaultSettings = {
             mode: "exclude",
             guildIds: [],
+            userIds: [],
             applyInDms: false
         };
         this.settings = this.loadSettings();
@@ -25,6 +26,17 @@ module.exports = class NoReplyPingEnhanced {
         this.guildStore = this.api.Webpack.getModule((module) => typeof module?.getGuilds === "function", { searchExports: true })
             ?? this.api.Webpack.getModule((module) => typeof module?.getGuild === "function", { searchExports: true });
         this.selectedGuildStore = this.api.Webpack.getModule((module) => typeof module?.getGuildId === "function", { searchExports: true });
+        this.userStore = this.api.Webpack.getModule(
+            (module) => typeof module?.getUser === "function" && typeof module?.getCurrentUser === "function",
+            { searchExports: true }
+        );
+        this.imageResolver = this.api.Webpack.getModule(
+            (module) => typeof module?.getUserAvatarURL === "function" && typeof module?.getGuildIconURL === "function",
+            { searchExports: true }
+        ) ?? this.api.Webpack.getModule(
+            (module) => typeof module?.getUserAvatarURL === "function",
+            { searchExports: true }
+        );
     }
 
     getModuleAndKey(filter) {
@@ -40,7 +52,8 @@ module.exports = class NoReplyPingEnhanced {
         const settings = {
             ...this.defaultSettings,
             ...(saved && typeof saved === "object" ? saved : {}),
-            guildIds: this.normalizeGuildIds(saved?.guildIds)
+            guildIds: this.normalizeGuildIds(saved?.guildIds),
+            userIds: this.normalizeUserIds(saved?.userIds ?? saved?.userId)
         };
 
         return {
@@ -52,6 +65,7 @@ module.exports = class NoReplyPingEnhanced {
 
     saveSettings() {
         this.settings.guildIds = this.normalizeGuildIds(this.settings.guildIds);
+        this.settings.userIds = this.normalizeUserIds(this.settings.userIds);
         BdApi.Data.save(this.meta.name, "settings", this.settings);
     }
 
@@ -59,6 +73,23 @@ module.exports = class NoReplyPingEnhanced {
         if (!Array.isArray(guildIds)) return [];
 
         return [...new Set(guildIds.filter((guildId) => typeof guildId === "string" && guildId.length > 0))];
+    }
+
+    normalizeUserId(userId) {
+        return typeof userId === "string" && userId.length > 0 ? userId : null;
+    }
+
+    normalizeUserIds(userIds) {
+        if (Array.isArray(userIds)) {
+            return [...new Set(userIds.map((userId) => this.normalizeUserId(userId)).filter(Boolean))];
+        }
+
+        const singleUserId = this.normalizeUserId(userIds);
+        return singleUserId ? [singleUserId] : [];
+    }
+
+    isLikelyDiscordUserId(userId) {
+        return /^\d{17,20}$/.test((userId || "").trim());
     }
 
     getGuildIdFromProps(props) {
@@ -79,7 +110,80 @@ module.exports = class NoReplyPingEnhanced {
             ?? null;
     }
 
-    shouldDisableMention(guildId) {
+    getCurrentUserId() {
+        const currentUserId = this.userStore?.getCurrentUser?.()?.id;
+        return typeof currentUserId === "string" && currentUserId.length > 0 ? currentUserId : null;
+    }
+
+    getStringAtPath(target, path) {
+        let value = target;
+        for (const key of path) {
+            value = value?.[key];
+        }
+
+        return typeof value === "string" && value.length > 0 ? value : null;
+    }
+
+    findNestedReplyTargetUserId(target, currentUserId) {
+        const queue = [{ value: target, depth: 0 }];
+        const visited = new Set();
+        const candidateUserIds = [];
+        let inspectedNodes = 0;
+
+        while (queue.length && inspectedNodes < 300) {
+            const { value, depth } = queue.shift();
+            if (!value || typeof value !== "object") continue;
+            if (visited.has(value)) continue;
+
+            visited.add(value);
+            inspectedNodes += 1;
+
+            const authorId = value?.author?.id;
+            if (typeof authorId === "string" && authorId.length > 0) {
+                candidateUserIds.push(authorId);
+            }
+
+            if (depth >= 4) continue;
+
+            for (const childValue of Object.values(value)) {
+                if (!childValue || typeof childValue !== "object") continue;
+                queue.push({ value: childValue, depth: depth + 1 });
+            }
+        }
+
+        const uniqueUserIds = [...new Set(candidateUserIds)];
+        const nonSelfUserIds = uniqueUserIds.filter((userId) => userId !== currentUserId);
+        if (nonSelfUserIds.length === 1) return nonSelfUserIds[0];
+        if (!nonSelfUserIds.length && uniqueUserIds.length === 1) return uniqueUserIds[0];
+
+        return null;
+    }
+
+    getTargetUserIdFromProps(props) {
+        const preferredPaths = [
+            ["baseMessage", "author", "id"],
+            ["referencedMessage", "author", "id"],
+            ["message", "referencedMessage", "author", "id"],
+            ["reply", "message", "author", "id"],
+            ["pendingReply", "message", "author", "id"],
+            ["pendingReply", "author", "id"],
+            ["item", "author", "id"],
+            ["message", "message", "author", "id"]
+        ];
+
+        for (const path of preferredPaths) {
+            const userId = this.getStringAtPath(props, path);
+            if (userId) return userId;
+        }
+
+        return this.findNestedReplyTargetUserId(props, this.getCurrentUserId());
+    }
+
+    shouldDisableMention(guildId, targetUserId = null) {
+        if (targetUserId && this.settings.userIds.includes(targetUserId)) {
+            return true;
+        }
+
         if (!guildId) return Boolean(this.settings.applyInDms);
 
         const isSelected = this.settings.guildIds.includes(guildId);
@@ -103,6 +207,33 @@ module.exports = class NoReplyPingEnhanced {
 
         this.settings.guildIds = [...guildIds];
         this.saveSettings();
+    }
+
+    addUserFilter(userId) {
+        const normalizedUserId = this.normalizeUserId(userId);
+        if (!normalizedUserId) return;
+
+        const userIds = new Set(this.settings.userIds);
+        userIds.add(normalizedUserId);
+        this.settings.userIds = [...userIds];
+        this.saveSettings();
+        window.dispatchEvent(new CustomEvent(`${this.meta.name}:settings-view-update`));
+    }
+
+    removeUserFilter(userId) {
+        const normalizedUserId = this.normalizeUserId(userId);
+        if (!normalizedUserId) return;
+
+        this.settings.userIds = this.settings.userIds.filter((currentUserId) => currentUserId !== normalizedUserId);
+        this.saveSettings();
+        window.dispatchEvent(new CustomEvent(`${this.meta.name}:settings-view-update`));
+    }
+
+    getFilteredUsers() {
+        return this.settings.userIds.map((userId) => ({
+            id: userId,
+            user: this.userStore?.getUser?.(userId) ?? null
+        }));
     }
 
     getGuildIconUrl(guild) {
@@ -132,6 +263,97 @@ module.exports = class NoReplyPingEnhanced {
         if (!parts.length) return name.slice(0, 2).toUpperCase();
 
         return parts.slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+    }
+
+    getUserDisplayName(user) {
+        if (!user || typeof user !== "object") return "Unknown user";
+
+        const username = typeof user.username === "string" && user.username.length > 0
+            ? user.username
+            : user.id;
+        const discriminator = typeof user.discriminator === "string" ? user.discriminator : "";
+
+        if (!discriminator || discriminator === "0") return username;
+        return `${username}#${discriminator}`;
+    }
+
+    getUserAvatarUrl(user) {
+        if (!user || typeof user !== "object") return null;
+
+        try {
+            if (typeof user.getAvatarURL === "function") {
+                const avatarUrl = user.getAvatarURL(64, false);
+                if (typeof avatarUrl === "string" && avatarUrl.length > 0) return avatarUrl;
+            }
+        }
+        catch {
+            // Ignore and fall back to the image resolver.
+        }
+
+        try {
+            if (typeof this.imageResolver?.getUserAvatarURL === "function") {
+                const avatarUrl = this.imageResolver.getUserAvatarURL(user);
+                if (typeof avatarUrl === "string" && avatarUrl.length > 0) {
+                    return user.avatar ? avatarUrl : `${window.location.origin}${avatarUrl}`;
+                }
+            }
+        }
+        catch {
+            // Ignore and fall back to initials.
+        }
+
+        const avatarHash = typeof user.avatar === "string" && user.avatar.length > 0 ? user.avatar : null;
+        if (!avatarHash || typeof user.id !== "string" || user.id.length === 0) return null;
+
+        const extension = avatarHash.startsWith("a_") ? "gif" : "png";
+        return `https://cdn.discordapp.com/avatars/${user.id}/${avatarHash}.${extension}?size=64`;
+    }
+
+    getUserInitials(user) {
+        const label = this.getUserDisplayName(user).trim();
+        if (!label) return "?";
+
+        const parts = label.split(/\s+/).filter(Boolean);
+        if (!parts.length) return label.slice(0, 2).toUpperCase();
+
+        return parts.slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+    }
+
+    createUserAvatar(user, size = 28) {
+        const avatar = document.createElement("span");
+        avatar.style.width = `${size}px`;
+        avatar.style.height = `${size}px`;
+        avatar.style.flex = "0 0 auto";
+        avatar.style.display = "inline-flex";
+        avatar.style.alignItems = "center";
+        avatar.style.justifyContent = "center";
+        avatar.style.overflow = "hidden";
+        avatar.style.borderRadius = "50%";
+        avatar.style.background = this.withAlpha(this.getThemeValue(["--brand-experiment", "--brand-500", "--text-link"], "rgb(88, 101, 242)"), 0.22);
+        avatar.style.color = this.getThemeValue(["--header-primary", "--text-normal"], "#ffffff");
+        avatar.style.fontSize = `${Math.max(11, Math.floor(size / 2.4))}px`;
+        avatar.style.fontWeight = "700";
+        avatar.style.lineHeight = "1";
+        avatar.style.textTransform = "uppercase";
+        const avatarUrl = this.getUserAvatarUrl(user);
+        if (avatarUrl) {
+            const image = document.createElement("img");
+            image.src = avatarUrl;
+            image.alt = "";
+            image.width = size;
+            image.height = size;
+            image.style.width = "100%";
+            image.style.height = "100%";
+            image.style.objectFit = "cover";
+            image.addEventListener("error", () => {
+                avatar.replaceChildren(this.getUserInitials(user));
+            }, { once: true });
+            avatar.append(image);
+            return avatar;
+        }
+
+        avatar.textContent = this.getUserInitials(user);
+        return avatar;
     }
 
     createGuildAvatar(guild, size = 20) {
@@ -608,6 +830,314 @@ module.exports = class NoReplyPingEnhanced {
         return wrapper;
     }
 
+    createUserPicker() {
+        const wrapper = document.createElement("div");
+        wrapper.style.display = "flex";
+        wrapper.style.flexDirection = "column";
+        wrapper.style.gap = "8px";
+        wrapper.style.marginTop = "20px";
+
+        const title = document.createElement("div");
+        title.textContent = "Users";
+        title.style.fontWeight = "600";
+
+        const description = document.createElement("div");
+        description.textContent = "Add one Discord user ID if you always want replies to that user to avoid pinging them.";
+        description.style.fontSize = "12px";
+        description.style.opacity = "0.7";
+        description.style.marginBottom = "4px";
+
+        const helper = document.createElement("div");
+        helper.style.padding = "12px";
+        helper.style.borderRadius = "10px";
+        helper.style.background = "var(--background-tertiary)";
+        helper.style.border = "1px solid var(--background-modifier-accent)";
+        helper.style.fontSize = "12px";
+        helper.style.lineHeight = "1.45";
+        helper.style.color = "var(--text-normal)";
+        helper.textContent = "How to get a User ID: enable Discord Developer Mode in User Settings > Advanced, then right-click the user and choose Copy User ID. Paste a numeric ID. This user rule is combined with the server rule using OR: if the replied user matches this ID, the mention is disabled even if the server rule would normally allow it. If Discord already has that user in local cache, their name and avatar will be shown automatically.";
+
+        const body = document.createElement("div");
+        body.style.display = "flex";
+        body.style.flexDirection = "column";
+        body.style.gap = "8px";
+
+        const control = document.createElement("div");
+        control.style.display = "flex";
+        control.style.flexDirection = "column";
+        control.style.gap = "10px";
+        control.style.padding = "10px";
+        control.style.borderRadius = "10px";
+        control.style.background = "var(--background-tertiary)";
+        control.style.border = "1px solid var(--background-modifier-accent)";
+
+        const selected = document.createElement("div");
+        selected.style.display = "flex";
+        selected.style.flexWrap = "wrap";
+        selected.style.gap = "6px";
+        selected.style.alignItems = "center";
+        selected.style.minHeight = "24px";
+
+        const entry = document.createElement("div");
+        entry.style.display = "flex";
+        entry.style.flexDirection = "column";
+        entry.style.gap = "8px";
+
+        const inputRow = document.createElement("div");
+        inputRow.style.display = "flex";
+        inputRow.style.gap = "8px";
+        inputRow.style.alignItems = "stretch";
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.inputMode = "numeric";
+        input.placeholder = "Paste a Discord User ID...";
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        input.style.flex = "1";
+        input.style.minWidth = "0";
+        input.style.padding = "10px 12px";
+        input.style.borderRadius = "8px";
+        input.style.border = "1px solid var(--background-modifier-accent)";
+        input.style.background = "var(--background-secondary)";
+        input.style.color = "var(--text-normal)";
+        input.style.font = "inherit";
+        input.style.outline = "none";
+
+        const addButton = document.createElement("button");
+        addButton.type = "button";
+        addButton.textContent = "Add";
+        addButton.style.border = "none";
+        addButton.style.borderRadius = "8px";
+        addButton.style.padding = "0 14px";
+        addButton.style.background = "var(--button-filled-brand-background, var(--brand-experiment, var(--brand-500)))";
+        addButton.style.color = "var(--white-500, #ffffff)";
+        addButton.style.font = "inherit";
+        addButton.style.fontWeight = "600";
+        addButton.style.cursor = "pointer";
+        addButton.style.minWidth = "84px";
+
+        const entryStatus = document.createElement("div");
+        entryStatus.style.fontSize = "12px";
+        entryStatus.style.lineHeight = "1.4";
+
+        const selection = document.createElement("div");
+        selection.style.display = "flex";
+        selection.style.flexDirection = "column";
+        selection.style.gap = "8px";
+
+        const accentColor = this.getThemeValue(["--brand-experiment", "--brand-500", "--text-link"], "rgb(88, 101, 242)");
+        const accentSoft = this.withAlpha(accentColor, 0.12);
+        const accentBorder = this.withAlpha(accentColor, 0.45);
+        let draftUserId = "";
+
+        const getUserBehaviorText = () => "Replies to these users will never ping them. This is an extra no-ping rule layered on top of the server configuration.";
+
+        const updateInputState = () => {
+            const trimmedUserId = draftUserId.trim();
+            const hasValue = trimmedUserId.length > 0;
+            const isValid = this.isLikelyDiscordUserId(trimmedUserId);
+
+            addButton.disabled = !isValid;
+            addButton.style.opacity = isValid ? "1" : "0.55";
+            addButton.style.cursor = isValid ? "pointer" : "not-allowed";
+            control.style.borderColor = hasValue && !isValid
+                ? "var(--status-danger, #f23f43)"
+                : "var(--background-modifier-accent)";
+            input.style.borderColor = hasValue && !isValid
+                ? "var(--status-danger, #f23f43)"
+                : "var(--background-modifier-accent)";
+
+            if (!hasValue) {
+                entryStatus.textContent = "Only numeric Discord user IDs are accepted. Each added user stays active even if Discord has not resolved them in local cache yet.";
+                entryStatus.style.color = "var(--text-muted)";
+                return;
+            }
+
+            if (!isValid) {
+                entryStatus.textContent = "That does not look like a Discord User ID. Paste a numeric snowflake copied from Discord Developer Mode.";
+                entryStatus.style.color = "var(--status-danger, #f23f43)";
+                return;
+            }
+
+            if (this.settings.userIds.includes(trimmedUserId)) {
+                entryStatus.textContent = "That user is already in the no-ping list.";
+                entryStatus.style.color = "var(--text-muted)";
+                return;
+            }
+
+            entryStatus.textContent = "Press Add to store this user no-ping rule. If either the user rule or the server rule matches, the mention will be disabled.";
+            entryStatus.style.color = "var(--text-muted)";
+        };
+
+        const submitUserId = () => {
+            const trimmedUserId = draftUserId.trim();
+            if (!this.isLikelyDiscordUserId(trimmedUserId)) {
+                updateInputState();
+                input.focus();
+                return;
+            }
+
+            if (this.settings.userIds.includes(trimmedUserId)) {
+                updateInputState();
+                input.focus();
+                return;
+            }
+
+            this.addUserFilter(trimmedUserId);
+            draftUserId = "";
+            input.value = "";
+            updateInputState();
+            renderSelection();
+        };
+
+        const renderSelection = () => {
+            selected.replaceChildren();
+            selection.replaceChildren();
+
+            const filteredUsers = this.getFilteredUsers();
+            if (!filteredUsers.length) {
+                const empty = document.createElement("div");
+                empty.textContent = "No user selected yet.";
+                empty.style.fontSize = "12px";
+                empty.style.opacity = "0.65";
+                selected.append(empty);
+
+                const hint = document.createElement("div");
+                hint.textContent = "Add a Discord User ID above if you always want replies to that user to avoid pinging them.";
+                hint.style.fontSize = "12px";
+                hint.style.opacity = "0.7";
+                selection.append(hint);
+                return;
+            }
+
+            const detail = document.createElement("div");
+            detail.style.fontSize = "12px";
+            detail.style.opacity = "0.75";
+            detail.textContent = `${filteredUsers.length} user${filteredUsers.length === 1 ? "" : "s"} selected. ${getUserBehaviorText()}`;
+
+            for (const { id, user } of filteredUsers) {
+                const chip = document.createElement("div");
+                chip.style.display = "inline-flex";
+                chip.style.alignItems = "center";
+                chip.style.gap = "6px";
+                chip.style.maxWidth = "100%";
+                chip.style.padding = "5px 8px";
+                chip.style.borderRadius = "999px";
+                chip.style.background = "var(--background-secondary)";
+                chip.style.border = `1px solid ${accentBorder}`;
+                chip.style.cursor = "pointer";
+                chip.style.transition = "background 120ms ease, border-color 120ms ease";
+                chip.tabIndex = 0;
+                chip.setAttribute("role", "button");
+                chip.setAttribute("aria-label", `Remove ${user ? this.getUserDisplayName(user) : id}`);
+
+                const avatar = this.createUserAvatar(user ?? { id, username: id }, 30);
+                avatar.style.width = "18px";
+                avatar.style.height = "18px";
+                avatar.style.fontSize = "10px";
+
+                const name = document.createElement("span");
+                name.textContent = user ? this.getUserDisplayName(user) : `User ID ${id}`;
+                name.style.fontWeight = "500";
+                name.style.whiteSpace = "nowrap";
+                name.style.overflow = "hidden";
+                name.style.textOverflow = "ellipsis";
+
+                const clear = document.createElement("button");
+                clear.type = "button";
+                clear.textContent = "x";
+                clear.style.border = "none";
+                clear.style.background = "transparent";
+                clear.style.color = "var(--text-muted)";
+                clear.style.cursor = "pointer";
+                clear.style.padding = "0";
+                clear.style.font = "inherit";
+
+                const clearUserFilter = () => {
+                    this.removeUserFilter(id);
+                    renderSelection();
+                };
+
+                const setChipStyle = (hovered) => {
+                    chip.style.background = hovered ? accentSoft : "var(--background-secondary)";
+                    chip.style.borderColor = accentBorder;
+                };
+
+                setChipStyle(false);
+                chip.addEventListener("mouseenter", () => setChipStyle(true));
+                chip.addEventListener("mouseleave", () => setChipStyle(false));
+                chip.addEventListener("focus", () => setChipStyle(true));
+                chip.addEventListener("blur", () => setChipStyle(false));
+                chip.addEventListener("click", clearUserFilter);
+                chip.addEventListener("keydown", (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    clearUserFilter();
+                });
+                clear.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    clearUserFilter();
+                });
+
+                chip.append(avatar, name, clear);
+                selected.append(chip);
+            }
+
+            selection.append(detail);
+        };
+
+        input.addEventListener("input", () => {
+            draftUserId = input.value;
+            updateInputState();
+        });
+        input.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter") return;
+
+            event.preventDefault();
+            submitUserId();
+        });
+        input.addEventListener("focus", () => {
+            input.style.borderColor = "var(--text-link)";
+            input.style.boxShadow = "0 0 0 1px var(--text-link)";
+        });
+        input.addEventListener("blur", () => {
+            input.style.boxShadow = "none";
+            updateInputState();
+        });
+        addButton.addEventListener("click", submitUserId);
+
+        inputRow.append(input, addButton);
+        entry.append(selected, inputRow, entryStatus);
+        control.append(entry);
+        body.append(helper, control, selection);
+
+        const handleUpdate = () => {
+            renderSelection();
+            updateInputState();
+        };
+        window.addEventListener(`${this.meta.name}:settings-view-update`, handleUpdate);
+        wrapper.cleanup = () => {
+            window.removeEventListener(`${this.meta.name}:settings-view-update`, handleUpdate);
+        };
+
+        wrapper.append(title, description, body);
+        renderSelection();
+        updateInputState();
+        return wrapper;
+    }
+
+    createFiltersPanel(guilds) {
+        const wrapper = document.createElement("div");
+        const guildPicker = this.createGuildPicker(guilds);
+        const userPicker = this.createUserPicker();
+        wrapper.append(guildPicker, userPicker);
+        wrapper.cleanup = () => {
+            if (typeof userPicker.cleanup === "function") userPicker.cleanup();
+        };
+        return wrapper;
+    }
+
     createNativeModeSettingsPanel() {
         if (typeof BdApi?.UI?.buildSettingsPanel !== "function") return null;
 
@@ -632,24 +1162,27 @@ module.exports = class NoReplyPingEnhanced {
 
                 this.settings.mode = value === "include" ? "include" : "exclude";
                 this.saveSettings();
+                window.dispatchEvent(new CustomEvent(`${this.meta.name}:settings-view-update`));
             }
         });
     }
 
-    createGuildPickerHost(guilds) {
+    createFiltersHost(guilds) {
         const React = this.api.React;
         const plugin = this;
 
-        return function GuildPickerHost() {
+        return function FiltersHost() {
             const containerRef = React.useRef(null);
 
             React.useEffect(() => {
                 const container = containerRef.current;
                 if (!container) return undefined;
 
-                container.replaceChildren(plugin.createGuildPicker(guilds));
+                const panel = plugin.createFiltersPanel(guilds);
+                container.replaceChildren(panel);
 
                 return () => {
+                    if (typeof panel.cleanup === "function") panel.cleanup();
                     container.replaceChildren();
                 };
             }, []);
@@ -671,8 +1204,8 @@ module.exports = class NoReplyPingEnhanced {
         const nativePanel = this.createNativeModeSettingsPanel();
         if (!nativePanel) return null;
 
-        const GuildPickerHost = this.createGuildPickerHost(guilds);
-        return React.createElement(React.Fragment, null, nativePanel, React.createElement(GuildPickerHost));
+        const FiltersHost = this.createFiltersHost(guilds);
+        return React.createElement(React.Fragment, null, nativePanel, React.createElement(FiltersHost));
     }
 
     getSettingsPanel() {
@@ -694,7 +1227,8 @@ module.exports = class NoReplyPingEnhanced {
             if (!props || typeof props !== "object") return;
 
             const guildId = this.getCurrentGuildId(props);
-            if (!this.shouldDisableMention(guildId)) return;
+            const targetUserId = this.getTargetUserIdFromProps(props);
+            if (!this.shouldDisableMention(guildId, targetUserId)) return;
 
             props.shouldMention = false;
         });
