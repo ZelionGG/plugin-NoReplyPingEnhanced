@@ -1,21 +1,21 @@
 {
-    "name": "plugin-noreplyping",
+    "name": "plugin-noreplypingenhanced",
     "version": "1.0.0",
-    "description": "Automatically sets replies to not ping the target.",
-    "main": "NoReplyPing.plugin.js",
+    "description": "Automatically sets replies to not ping the target, with per-server and user-based filtering.",
+    "main": "NoReplyPingEnhanced.plugin.js",
     "scripts": {
         "format": "prettier --write \"./*.js\""
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/BleedingBD/plugin-NoReplyPing.git"
+        "url": "git+https://github.com/ZelionGG/plugin-NoReplyPingEnhanced.git"
     },
-    "author": "Qb",
+    "author": "ZelionGG",
     "license": "Unlicense",
     "bugs": {
-        "url": "https://github.com/BleedingBD/plugin-NoReplyPing/issues"
+        "url": "https://github.com/ZelionGG/plugin-NoReplyPingEnhanced/issues"
     },
-    "homepage": "https://github.com/BleedingBD/plugin-NoReplyPing#readme",
+    "homepage": "https://github.com/ZelionGG/plugin-NoReplyPingEnhanced#readme",
     "devDependencies": {
         "prettier": "^3.0.3"
     }
